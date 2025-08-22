@@ -463,120 +463,115 @@ function showStateDetails(stateName) {
     `;
 }
 
-// Store path-to-state mapping
-let pathStateMapping = {};
+// Removed: Complex path-to-state mapping approach - no longer needed
 
-// Update map colors only (without reinitialization)
+// Update map colors efficiently without reinitialization
 function updateMapColorsOnly(activity) {
     console.log('Updating map colors for activity:', activity);
     
-    // If we don't have the mapping yet, build it using event triggering
-    if (Object.keys(pathStateMapping).length === 0) {
-        console.log('Building path-to-state mapping...');
-        buildPathStateMapping(() => {
-            // After mapping is built, call this function again
-            updateMapColorsOnly(activity);
-        });
-        return;
-    }
-    
     try {
-        // Get the current stateSpecificStyles for the new activity
+        // Get the plugin instance
+        const mapInstance = $('#map').data('plugin-usmap');
+        if (!mapInstance) {
+            console.error('Map plugin instance not found');
+            return false;
+        }
+        
+        // Get the new state styles for the current activity
         const newStateStyles = getStateSpecificStyles(activity);
         console.log(`Generated styles for ${Object.keys(newStateStyles).length} states`);
         
-        // Use our built mapping to update colors
-        const svg = $('#map svg');
-        const paths = svg.find('path');
         let updateCount = 0;
         
-        Object.keys(newStateStyles).forEach(abbr => {
-            const style = newStateStyles[abbr];
-            
-            // Find the path index for this state
-            const pathIndex = pathStateMapping[abbr];
-            if (pathIndex !== undefined) {
-                const path = paths.eq(pathIndex)[0];
-                if (path) {
-                    path.setAttribute('fill', style.fill);
-                    path.style.fill = style.fill;
-                    console.log(`✓ Updated ${abbr} (path ${pathIndex}) to ${style.fill}`);
+        // Method 1: Try to update through plugin's internal state references
+        if (mapInstance.stateShapes) {
+            Object.keys(newStateStyles).forEach(abbr => {
+                const style = newStateStyles[abbr];
+                const stateShape = mapInstance.stateShapes[abbr];
+                
+                if (stateShape && stateShape.attr) {
+                    // Update Raphael element directly
+                    stateShape.attr({ fill: style.fill });
                     updateCount++;
+                    console.log(`✓ Updated ${abbr} via Raphael to ${style.fill}`);
                 }
-            } else {
-                console.log(`✗ No mapping found for state ${abbr}`);
-            }
-        });
+            });
+        }
+        
+        // Method 2: Fallback to direct SVG manipulation if Method 1 didn't work
+        if (updateCount === 0) {
+            console.log('Fallback to direct SVG manipulation');
+            const svg = $('#map svg');
+            const paths = svg.find('path');
+            
+            // Try to match paths by triggering mouseover events to identify them
+            Object.keys(newStateStyles).forEach(abbr => {
+                const style = newStateStyles[abbr];
+                
+                // Use a simple approach: find the path by triggering events
+                try {
+                    const originalHandler = mapInstance.mouseover;
+                    let targetPath = null;
+                    
+                    // Temporarily override mouseover to capture the path
+                    mapInstance.mouseover = function(event, data) {
+                        if (data && data.name === abbr) {
+                            targetPath = event.target;
+                        }
+                        if (originalHandler) originalHandler.call(this, event, data);
+                    };
+                    
+                    // Trigger the event to find the path
+                    $('#map').usmap('trigger', abbr, 'mouseover', {});
+                    
+                    // Restore original handler
+                    mapInstance.mouseover = originalHandler;
+                    
+                    // Update the found path
+                    if (targetPath) {
+                        targetPath.setAttribute('fill', style.fill);
+                        targetPath.style.fill = style.fill;
+                        updateCount++;
+                        console.log(`✓ Updated ${abbr} via DOM to ${style.fill}`);
+                    }
+                } catch (e) {
+                    console.log(`Could not update ${abbr}:`, e.message);
+                }
+            });
+        }
+        
+        // Method 3: Last resort - update all paths by position (less reliable)
+        if (updateCount === 0) {
+            console.log('Last resort: updating by path inspection');
+            const svg = $('#map svg');
+            const paths = svg.find('path');
+            
+            paths.each(function(index) {
+                const path = $(this);
+                // Try to find a data attribute or use the Raphael data
+                const raphaelElement = this.raphaelObject || this.raphaelid;
+                if (raphaelElement && raphaelElement.data) {
+                    const stateData = raphaelElement.data();
+                    if (stateData && stateData.name && newStateStyles[stateData.name]) {
+                        const style = newStateStyles[stateData.name];
+                        this.setAttribute('fill', style.fill);
+                        this.style.fill = style.fill;
+                        updateCount++;
+                    }
+                }
+            });
+        }
         
         console.log(`Map color update completed. Updated ${updateCount} states.`);
+        return updateCount > 0;
         
     } catch (error) {
         console.error('Error updating map colors:', error);
+        return false;
     }
 }
 
-// Build mapping between path elements and states using event triggering
-function buildPathStateMapping(callback) {
-    console.log('Building path-to-state mapping using event triggers...');
-    pathStateMapping = {};
-    const stateList = Object.keys(stateNameToAbbr);
-    let processedCount = 0;
-    
-    // Create a temporary event handler to capture path elements
-    const originalMouseover = $('#map').data('plugin-usmap').mouseover;
-    
-    // Override the mouseover handler temporarily
-    $('#map').usmap('option', 'mouseover', function(event, data) {
-        const svg = $('#map svg');
-        const paths = svg.find('path');
-        
-        if (event.target) {
-            const pathIndex = paths.index(event.target);
-            if (pathIndex >= 0) {
-                pathStateMapping[data.name] = pathIndex;
-                console.log(`Mapped ${data.name} to path ${pathIndex}`);
-            }
-        }
-        
-        // Call original handler if it exists
-        if (originalMouseover && typeof originalMouseover === 'function') {
-            originalMouseover.call(this, event, data);
-        }
-    });
-    
-    // Trigger mouseover for each state to build the mapping
-    stateList.forEach((stateName, index) => {
-        const abbr = stateNameToAbbr[stateName];
-        
-        setTimeout(() => {
-            try {
-                $('#map').usmap('trigger', abbr, 'mouseover', {});
-                
-                // Trigger mouseout to clear hover effects
-                setTimeout(() => {
-                    $('#map').usmap('trigger', abbr, 'mouseout', {});
-                    
-                    processedCount++;
-                    if (processedCount === stateList.length) {
-                        // Restore original mouseover handler
-                        $('#map').usmap('option', 'mouseover', originalMouseover);
-                        
-                        console.log(`Mapping completed. Found ${Object.keys(pathStateMapping).length} states.`);
-                        if (callback) callback();
-                    }
-                }, 10);
-                
-            } catch (error) {
-                console.log(`Could not trigger events for ${abbr}:`, error.message);
-                processedCount++;
-                if (processedCount === stateList.length) {
-                    $('#map').usmap('option', 'mouseover', originalMouseover);
-                    if (callback) callback();
-                }
-            }
-        }, index * 20); // Stagger the triggers
-    });
-}
+// Removed: buildPathStateMapping function - no longer needed with new efficient approach
 
 // Initialize map with new colors (proper plugin destruction and recreation)
 function initMapWithNewColors() {
@@ -746,10 +741,19 @@ function addControlListeners() {
         currentActivity = this.value;
         updateColorScale(currentActivity);
         
-        // Use simple reinitialization approach - it works reliably
-        initMapWithNewColors();
+        // Try efficient color update first
+        const updateSuccess = updateMapColorsOnly(currentActivity);
         
-        // Show the #1 state for the new activity
+        if (!updateSuccess) {
+            console.log('Color update failed, falling back to map recreation');
+            // Fallback to map recreation only if color update fails
+            initMapWithNewColors();
+        } else {
+            console.log('Map colors updated successfully without recreation');
+        }
+        
+        // Show the #1 state for the new activity (reduced delay since no recreation)
+        const delay = updateSuccess ? 100 : 600; // Shorter delay for color-only updates
         setTimeout(() => {
             const topStates = getStateRanking(currentActivity);
             if (topStates && topStates.length > 0) {
@@ -757,7 +761,7 @@ function addControlListeners() {
                 console.log(`Showing state details for #1 state in ${currentActivity}: ${topState}`);
                 showStateDetails(topState);
             }
-        }, 600);
+        }, delay);
     });
 }
 
@@ -925,8 +929,6 @@ window.mapDebug = {
     showTooltip,
     updateTooltipPosition,
     updateMapColorsOnly,
-    buildPathStateMapping,
     initMapWithNewColors,
-    debugMapElements,
-    pathStateMapping: () => pathStateMapping
+    debugMapElements
 };
