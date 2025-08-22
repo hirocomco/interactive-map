@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive US Map: State-by-State Outdoor Activity Preferences</title>
+    <meta name="description" content="Explore outdoor activity preferences across all 50 US states with our interactive map. Discover which states love hiking, fishing, camping, and more based on search data.">
+    
+    <!-- Open Graph / Social Media -->
+    <meta property="og:title" content="Interactive US Map: Outdoor Activity Preferences by State">
+    <meta property="og:description" content="Discover fascinating geographic patterns in outdoor activities across America">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="https://your-domain.com/og-image.png">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Interactive US Map: Outdoor Activity Preferences">
+    <meta name="twitter:description" content="Explore which outdoor activities dominate in each US state">
+    
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>US Outdoor Activity Preferences by State</h1>
+        <p>Explore geographic patterns in outdoor recreation across America</p>
+    </header>
+
+    <main>
+        <div class="controls">
+            <div class="activity-selector">
+                <label for="activity-select">View by Activity:</label>
+                <select id="activity-select">
+                    <option value="total">Total Activity (All)</option>
+                    <option value="fishing">Fishing</option>
+                    <option value="backpacking">Backpacking</option>
+                    <option value="biking">Biking</option>
+                    <option value="birdwatching">Birdwatching</option>
+                    <option value="camping">Camping</option>
+                    <option value="hiking">Hiking</option>
+                    <option value="hunting">Hunting</option>
+                    <option value="kayaking">Kayaking</option>
+                    <option value="mountaineering">Mountaineering</option>
+                    <option value="rv_camping">RV Camping</option>
+                    <option value="skiing">Skiing</option>
+                    <option value="snowboarding">Snowboarding</option>
+                    <option value="surfing">Surfing</option>
+                    <option value="swimming">Swimming</option>
+                </select>
+            </div>
+            
+            <div class="legend">
+                <h3>Searches per 100k Population</h3>
+                <div class="legend-scale">
+                    <div class="legend-item">
+                        <span class="legend-color low"></span>
+                        <span class="legend-text">Low</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color medium"></span>
+                        <span class="legend-text">Medium</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color high"></span>
+                        <span class="legend-text">High</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color very-high"></span>
+                        <span class="legend-text">Very High</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="map-container">
+            <div id="map" style="width: 100%; height: 500px;"></div>
+            <div id="tooltip" class="tooltip"></div>
+        </div>
+
+        <div class="state-details" id="state-details">
+            <div class="details-content">
+                <h2 id="details-title">Click a state to see details</h2>
+                <div id="details-body">
+                    <p>Select any state on the map above to view detailed outdoor activity data and rankings.</p>
+                </div>
+            </div>
+        </div>
+
+        <section class="insights">
+            <h2>Key Insights</h2>
+            <div class="insight-grid">
+                <div class="insight-card">
+                    <h3>Most Active State</h3>
+                    <p><strong>Vermont</strong> leads with 8,515 searches per 100k population</p>
+                </div>
+                <div class="insight-card">
+                    <h3>Surfing Capital</h3>
+                    <p><strong>Hawaii</strong> dominates surfing with 2,314 searches per 100k</p>
+                </div>
+                <div class="insight-card">
+                    <h3>Mountain Sports</h3>
+                    <p><strong>Colorado</strong> and western states lead in skiing and mountaineering</p>
+                </div>
+                <div class="insight-card">
+                    <h3>Regional Patterns</h3>
+                    <p>Coastal states prefer water activities, mountain states favor winter sports</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>Data visualization of outdoor activity search patterns across US states</p>
+        <p>© 2024 Interactive Outdoor Activity Map</p>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="us-map/lib/raphael.js"></script>
+    <script src="us-map/jquery.usmap.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/map.js"></script>
+</body>
+</html>
