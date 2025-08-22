@@ -64,15 +64,33 @@ interactive-map/
 
 ## Development
 
-No build process required - just open `index.html` in a browser or serve via any HTTP server:
+**Important**: The map must run from a web server (not opened as a file) to load properly.
 
+### Setup Options
+
+**Option 1: Python (Recommended)**
 ```bash
-# Simple Python server
-python -m http.server 8000
-
-# Or Node.js
-npx http-server
+cd /Users/oded/opt/interactive-map
+python3 -m http.server 8000
 ```
+Then open: http://localhost:8000
+
+**Option 2: Node.js**
+```bash
+cd /Users/oded/opt/interactive-map
+npx http-server -p 8000
+```
+Then open: http://localhost:8000
+
+**Option 3: PHP**
+```bash
+cd /Users/oded/opt/interactive-map
+php -S localhost:8000
+```
+Then open: http://localhost:8000
+
+### Why This Is Needed
+Modern browsers block loading external resources when opening HTML files directly (`file://` protocol). Running from a web server (`http://` protocol) allows the external resources to load properly.
 
 ## Browser Support
 

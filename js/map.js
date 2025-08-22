@@ -50,6 +50,9 @@ function initMap() {
         // Set up color scale for initial activity
         updateColorScale(currentActivity);
         
+        // Generate state-specific styles for current activity
+        const stateSpecificStyles = getStateSpecificStyles(currentActivity);
+        
         // Initialize the US Map with explicit dimensions
         const mapInstance = $('#map').usmap({
             width: 975,
@@ -60,6 +63,7 @@ function initMap() {
                 'stroke-width': 1,
                 'stroke-linejoin': 'round'
             },
+            stateSpecificStyles: stateSpecificStyles,
             stateHoverStyles: {
                 fill: '#333',
                 stroke: '#333',
@@ -85,46 +89,6 @@ function initMap() {
             // Mouseover handler
             mouseover: function(event, data) {
                 const stateName = abbrToStateName[data.name];
-                
-                // Store the path mapping for future color updates
-                if (event.target) {
-                    const svg = $('#map svg');
-                    const pathIndex = svg.find('path').index(event.target);
-                    if (pathIndex >= 0) {
-                        window.pathToStateMapping[pathIndex] = data.name;
-                        console.log('Stored mapping:', pathIndex, '->', data.name);
-                    }
-                }
-                
-                // Apply the correct color immediately and ensure it persists
-                if (event.target && stateName && stateData[stateName]) {
-                    const stateInfo = stateData[stateName];
-                    const value = stateInfo[currentActivity];
-                    const color = value > 0 ? colorScale(value) : '#f0f0f0';
-                    
-                    // Apply color directly
-                    event.target.setAttribute('fill', color);
-                    event.target.style.fill = color;
-                    
-                    // Store the color for later reference
-                    $(event.target).data('correctColor', color);
-                    
-                    console.log('Applied color to', stateName, '(' + data.name + '):', color, 'value:', value);
-                    
-                    // Special debug for Delaware
-                    if (stateName === 'Delaware') {
-                        console.log('DELAWARE DEBUG:', {
-                            stateName,
-                            abbr: data.name,
-                            value,
-                            color,
-                            currentActivity,
-                            allData: stateInfo,
-                            elementFill: event.target.getAttribute('fill'),
-                            elementStyle: event.target.style.fill
-                        });
-                    }
-                }
                 
                 if (!stateName || !stateData[stateName]) {
                     return;
@@ -170,10 +134,7 @@ function initMap() {
         
         console.log("Map initialized successfully");
         
-        // Apply initial colors after a short delay to ensure map is fully rendered
-        setTimeout(() => {
-            applyInitialColors();
-        }, 200);
+        console.log("Map colors applied via stateSpecificStyles");
         
     } catch (error) {
         console.error('Error initializing map:', error);
@@ -189,33 +150,9 @@ function initMap() {
     }
 }
 
-// Apply initial colors by triggering hover events
-function applyInitialColors() {
-    console.log('Applying initial colors...');
-    
-    // Trigger hover for each state to build mapping and apply colors
-    Object.keys(stateNameToAbbr).forEach((stateName, index) => {
-        const abbr = stateNameToAbbr[stateName];
-        
-        setTimeout(() => {
-            try {
-                // Try to trigger events manually
-                $('#map').usmap('trigger', abbr, 'mouseover', {});
-                
-                // Immediately trigger mouseout to not leave it highlighted
-                setTimeout(() => {
-                    $('#map').usmap('trigger', abbr, 'mouseout', {});
-                }, 10);
-                
-            } catch (e) {
-                console.log('Could not trigger for', abbr, ':', e.message);
-            }
-        }, index * 20); // Stagger the triggers
-    });
-}
 
-// Get state styles based on current activity
-function getStateStyles(activity) {
+// Get state-specific styles for jQuery US Map plugin
+function getStateSpecificStyles(activity) {
     const styles = {};
     
     Object.keys(stateData).forEach(stateName => {
@@ -236,6 +173,11 @@ function getStateStyles(activity) {
     
     console.log(`Generated ${Object.keys(styles).length} state styles for ${activity}`);
     return styles;
+}
+
+// Get state styles based on current activity (kept for compatibility)
+function getStateStyles(activity) {
+    return getStateSpecificStyles(activity);
 }
 
 // Get hover styles (darker version of current color)
@@ -289,14 +231,17 @@ function updateColorScale(activity) {
         if (value <= 0) return '#f0f0f0'; // Light gray for no data
         
         const normalized = (value - min) / (max - min);
-        console.log(`Value ${value} normalized to ${normalized} (min=${min}, max=${max})`);
         
-        // Use a blue color scale: light blue to dark blue
-        const intensity = Math.round(255 * (1 - normalized * 0.9)); // Light to dark
+        // Use a blue color scale: light blue to dark blue (hex colors)
+        const intensity = Math.round(255 * (1 - normalized * 0.8)); // Light to dark
         const blue = Math.round(255 * (0.4 + normalized * 0.6)); // Medium to full blue
-        const color = `rgb(${intensity}, ${intensity}, ${blue})`;
         
-        console.log(`Color for value ${value}: ${color}`);
+        // Convert to hex
+        const intensityHex = intensity.toString(16).padStart(2, '0');
+        const blueHex = blue.toString(16).padStart(2, '0');
+        const color = `#${intensityHex}${intensityHex}${blueHex}`;
+        
+        console.log(`Color for value ${value}: ${color} (normalized: ${normalized})`);
         return color;
     };
     
@@ -325,71 +270,6 @@ function updateLegend(min, max) {
     });
 }
 
-// Store path-to-state mapping when hovering
-window.pathToStateMapping = {};
-
-// Update map colors and styles
-function updateMapColors(activity, isRetry = false) {
-    console.log('Updating map colors for activity:', activity, isRetry ? '(retry)' : '(initial)');
-    console.log('Current colorScale min/max should be for:', activity);
-    
-    const stateStyles = getStateStyles(activity);
-    const svg = $('#map svg');
-    
-    if (svg.length > 0) {
-        console.log('Updating colors for', Object.keys(stateStyles).length, 'states');
-        
-        // Use the stored mapping if available
-        if (Object.keys(window.pathToStateMapping).length > 0) {
-            console.log('Using stored path mapping');
-            
-            Object.keys(window.pathToStateMapping).forEach(pathIndex => {
-                const stateAbbr = window.pathToStateMapping[pathIndex];
-                const stateName = abbrToStateName[stateAbbr];
-                const path = svg.find('path').eq(parseInt(pathIndex))[0];
-                
-                if (path && stateName && stateData[stateName]) {
-                    const stateInfo = stateData[stateName];
-                    const value = stateInfo[activity]; // Use the activity parameter, not currentActivity
-                    const color = value > 0 ? colorScale(value) : '#f0f0f0';
-                    
-                    path.setAttribute('fill', color);
-                    path.style.fill = color;
-                    console.log('Updated', stateName, '(' + stateAbbr + ') to', color, 'value:', value, 'for activity:', activity);
-                }
-            });
-        } else {
-            console.log('No path mapping available, using fallback method...');
-            
-            // Fallback: try to apply colors directly to all path elements
-            const svg = $('#map svg');
-            const paths = svg.find('path');
-            
-            paths.each(function(index, path) {
-                // Try to determine state from path attributes
-                const title = path.getAttribute('title');
-                const dataState = path.getAttribute('data-state');
-                
-                if (title || dataState) {
-                    const stateAbbr = title || dataState;
-                    const stateName = abbrToStateName[stateAbbr];
-                    
-                    if (stateName && stateData[stateName]) {
-                        const stateInfo = stateData[stateName];
-                        const value = stateInfo[activity];
-                        const color = value > 0 ? colorScale(value) : '#f0f0f0';
-                        
-                        path.setAttribute('fill', color);
-                        path.style.fill = color;
-                        console.log('Fallback: Updated', stateName, '(' + stateAbbr + ') to', color);
-                    }
-                }
-            });
-        }
-    }
-    
-    console.log('Color update completed');
-}
 
 // Show detailed state information
 function showStateDetails(stateName) {
@@ -451,6 +331,248 @@ function showStateDetails(stateName) {
     `;
 }
 
+// Store path-to-state mapping
+let pathStateMapping = {};
+
+// Update map colors only (without reinitialization)
+function updateMapColorsOnly(activity) {
+    console.log('Updating map colors for activity:', activity);
+    
+    // If we don't have the mapping yet, build it using event triggering
+    if (Object.keys(pathStateMapping).length === 0) {
+        console.log('Building path-to-state mapping...');
+        buildPathStateMapping(() => {
+            // After mapping is built, call this function again
+            updateMapColorsOnly(activity);
+        });
+        return;
+    }
+    
+    try {
+        // Get the current stateSpecificStyles for the new activity
+        const newStateStyles = getStateSpecificStyles(activity);
+        console.log(`Generated styles for ${Object.keys(newStateStyles).length} states`);
+        
+        // Use our built mapping to update colors
+        const svg = $('#map svg');
+        const paths = svg.find('path');
+        let updateCount = 0;
+        
+        Object.keys(newStateStyles).forEach(abbr => {
+            const style = newStateStyles[abbr];
+            
+            // Find the path index for this state
+            const pathIndex = pathStateMapping[abbr];
+            if (pathIndex !== undefined) {
+                const path = paths.eq(pathIndex)[0];
+                if (path) {
+                    path.setAttribute('fill', style.fill);
+                    path.style.fill = style.fill;
+                    console.log(`✓ Updated ${abbr} (path ${pathIndex}) to ${style.fill}`);
+                    updateCount++;
+                }
+            } else {
+                console.log(`✗ No mapping found for state ${abbr}`);
+            }
+        });
+        
+        console.log(`Map color update completed. Updated ${updateCount} states.`);
+        
+    } catch (error) {
+        console.error('Error updating map colors:', error);
+    }
+}
+
+// Build mapping between path elements and states using event triggering
+function buildPathStateMapping(callback) {
+    console.log('Building path-to-state mapping using event triggers...');
+    pathStateMapping = {};
+    const stateList = Object.keys(stateNameToAbbr);
+    let processedCount = 0;
+    
+    // Create a temporary event handler to capture path elements
+    const originalMouseover = $('#map').data('plugin-usmap').mouseover;
+    
+    // Override the mouseover handler temporarily
+    $('#map').usmap('option', 'mouseover', function(event, data) {
+        const svg = $('#map svg');
+        const paths = svg.find('path');
+        
+        if (event.target) {
+            const pathIndex = paths.index(event.target);
+            if (pathIndex >= 0) {
+                pathStateMapping[data.name] = pathIndex;
+                console.log(`Mapped ${data.name} to path ${pathIndex}`);
+            }
+        }
+        
+        // Call original handler if it exists
+        if (originalMouseover && typeof originalMouseover === 'function') {
+            originalMouseover.call(this, event, data);
+        }
+    });
+    
+    // Trigger mouseover for each state to build the mapping
+    stateList.forEach((stateName, index) => {
+        const abbr = stateNameToAbbr[stateName];
+        
+        setTimeout(() => {
+            try {
+                $('#map').usmap('trigger', abbr, 'mouseover', {});
+                
+                // Trigger mouseout to clear hover effects
+                setTimeout(() => {
+                    $('#map').usmap('trigger', abbr, 'mouseout', {});
+                    
+                    processedCount++;
+                    if (processedCount === stateList.length) {
+                        // Restore original mouseover handler
+                        $('#map').usmap('option', 'mouseover', originalMouseover);
+                        
+                        console.log(`Mapping completed. Found ${Object.keys(pathStateMapping).length} states.`);
+                        if (callback) callback();
+                    }
+                }, 10);
+                
+            } catch (error) {
+                console.log(`Could not trigger events for ${abbr}:`, error.message);
+                processedCount++;
+                if (processedCount === stateList.length) {
+                    $('#map').usmap('option', 'mouseover', originalMouseover);
+                    if (callback) callback();
+                }
+            }
+        }, index * 20); // Stagger the triggers
+    });
+}
+
+// Initialize map with new colors (proper plugin destruction and recreation)
+function initMapWithNewColors() {
+    try {
+        console.log('Recreating map with new colors for:', currentActivity);
+        
+        const mapContainer = $('#map');
+        
+        // Step 1: Completely destroy the existing plugin instance
+        console.log('Destroying existing plugin instance...');
+        
+        // Remove all jQuery data and event handlers associated with the plugin
+        mapContainer.removeData();
+        mapContainer.off();
+        
+        // Clear all content
+        mapContainer.empty();
+        
+        // Step 2: Completely recreate the map container element to ensure clean state
+        const mapContainerParent = mapContainer.parent();
+        const newMapContainer = $('<div id="map" style="width: 100%; height: 500px;"></div>');
+        
+        mapContainer.remove();
+        mapContainerParent.append(newMapContainer);
+        
+        console.log('Created fresh map container');
+        
+        // Step 3: Generate state-specific styles for current activity
+        const stateSpecificStyles = getStateSpecificStyles(currentActivity);
+        
+        // Step 4: Initialize fresh map instance with delay to ensure DOM is ready
+        setTimeout(() => {
+            console.log('Initializing fresh map instance...');
+            
+            const mapInstance = newMapContainer.usmap({
+                width: 975,
+                height: 500,
+                stateStyles: {
+                    fill: '#f0f0f0',
+                    stroke: '#fff',
+                    'stroke-width': 1,
+                    'stroke-linejoin': 'round'
+                },
+                stateSpecificStyles: stateSpecificStyles,
+                stateHoverStyles: {
+                    fill: '#333',
+                    stroke: '#333',
+                    'stroke-width': 2
+                },
+                showLabels: false,
+                
+                // Click handler
+                click: function(event, data) {
+                    const stateName = abbrToStateName[data.name];
+                    if (stateName) {
+                        showStateDetails(stateName);
+                        
+                        if (window.innerWidth < 768) {
+                            document.getElementById('state-details').scrollIntoView({ 
+                                behavior: 'smooth' 
+                            });
+                        }
+                    }
+                },
+                
+                // Mouseover handler
+                mouseover: function(event, data) {
+                    const stateName = abbrToStateName[data.name];
+                    
+                    if (!stateName || !stateData[stateName]) {
+                        return;
+                    }
+                    
+                    const stateInfo = stateData[stateName];
+                    const value = stateInfo[currentActivity];
+                    const ranking = getStateRanking(currentActivity).indexOf(stateName) + 1;
+                    
+                    showTooltip(event, `
+                        <strong>${stateName}</strong><br/>
+                        ${activityMeta[currentActivity].name}: ${value.toLocaleString()}<br/>
+                        Rank: #${ranking} of ${Object.keys(stateData).length}
+                    `);
+                },
+                
+                // Mousemove handler
+                mousemove: function(event, data) {
+                    updateTooltipPosition(event);
+                },
+                
+                // Mouseout handler
+                mouseout: function(event, data) {
+                    $('#tooltip').css('opacity', 0);
+                }
+            });
+            
+            // Store map reference
+            window.mapInstance = mapInstance;
+            
+            console.log(`Fresh map created successfully with colors for ${currentActivity}`);
+            
+            // Verify SVG creation
+            setTimeout(() => {
+                const svg = newMapContainer.find('svg');
+                if (svg.length > 0) {
+                    const pathCount = svg.find('path').length;
+                    console.log(`✅ Map SVG created successfully with ${pathCount} paths`);
+                } else {
+                    console.error('❌ SVG creation failed - this should not happen with fresh container');
+                    
+                    // Last resort fallback
+                    console.log('Attempting emergency fallback...');
+                    initMap();
+                }
+            }, 100);
+            
+        }, 100);
+        
+    } catch (error) {
+        console.error('Error recreating map:', error);
+        
+        // Emergency fallback
+        console.log('Emergency fallback to full initialization');
+        setTimeout(() => {
+            initMap();
+        }, 200);
+    }
+}
+
 // Add control listeners
 function addControlListeners() {
     const activitySelect = document.getElementById('activity-select');
@@ -460,7 +582,9 @@ function addControlListeners() {
         
         currentActivity = this.value;
         updateColorScale(currentActivity);
-        updateMapColors(currentActivity);
+        
+        // Use simple reinitialization approach - it works reliably
+        initMapWithNewColors();
         
         // Clear state details when switching activities
         document.getElementById('details-title').textContent = 'Click a state to see details';
@@ -547,90 +671,79 @@ function updateTooltipPosition(event) {
     });
 }
 
-// Manual color update function for testing
-function forceColorUpdate() {
-    console.log('Force updating colors...');
+// Debug function to inspect map elements
+function debugMapElements() {
     const svg = $('#map svg');
-    if (svg.length > 0) {
-        svg.find('path').each(function(index) {
-            const path = this;
-            // Force a test color on first few states
-            if (index < 5) {
-                path.setAttribute('fill', index === 0 ? '#ff0000' : index === 1 ? '#00ff00' : '#0000ff');
-                path.style.fill = index === 0 ? '#ff0000' : index === 1 ? '#00ff00' : '#0000ff';
-                console.log('Set path', index, 'to test color');
-            }
-        });
-    }
-}
-
-// Test Delaware specifically
-function testDelaware() {
-    console.log('Testing Delaware color calculation...');
-    const delawareData = stateData['Delaware'];
-    if (delawareData) {
-        console.log('Delaware data:', delawareData);
-        console.log('Current activity:', currentActivity);
-        console.log('Delaware value for', currentActivity + ':', delawareData[currentActivity]);
-        
-        const { min, max } = getMinMaxForActivity(currentActivity);
-        console.log('Min/Max for', currentActivity + ':', min, max);
-        
-        const color = colorScale(delawareData[currentActivity]);
-        console.log('Calculated color for Delaware:', color);
-        
-        // Get Delaware's ranking
-        const ranking = getStateRanking(currentActivity);
-        console.log('Top 5 states for', currentActivity + ':', ranking.slice(0, 5));
-        console.log('Delaware rank:', ranking.indexOf('Delaware') + 1);
-    }
-}
-
-// Initialize all colors by triggering hover events
-function initAllColors() {
-    console.log('Initializing all colors...');
+    const paths = svg.find('path');
     
-    // Trigger a quick hover over all states to learn the mapping and apply colors
-    Object.keys(stateNameToAbbr).forEach((stateName, index) => {
-        const abbr = stateNameToAbbr[stateName];
-        setTimeout(() => {
-            try {
-                // Create a fake event to trigger the hover
-                $('#map').usmap('trigger', abbr, 'mouseover', {});
-                setTimeout(() => {
-                    $('#map').usmap('trigger', abbr, 'mouseout', {});
-                }, 10);
-            } catch (e) {
-                console.log('Could not trigger for', abbr);
+    console.log('=== MAP DEBUG INFO ===');
+    console.log(`SVG found: ${svg.length > 0}`);
+    console.log(`Total paths: ${paths.length}`);
+    
+    // Show first few paths with all attributes
+    paths.each(function(index) {
+        const path = $(this);
+        const allAttrs = {};
+        
+        // Get all attributes
+        if (this.attributes) {
+            for (let i = 0; i < this.attributes.length; i++) {
+                const attr = this.attributes[i];
+                allAttrs[attr.name] = attr.value;
             }
-        }, index * 20); // Stagger the triggers
+        }
+        
+        console.log(`Path ${index}:`, {
+            allAttributes: allAttrs,
+            'data-state': path.data('state'),
+            'data-abbr': path.data('abbr'),
+            'jquery-data': path.data(),
+            currentFill: path.attr('fill') || path.css('fill')
+        });
+        
+        // Only log first 3 to avoid spam
+        if (index >= 2) return false;
     });
     
-    // After all triggers, force-apply colors with CSS override
-    setTimeout(() => {
-        forceApplyCorrectColors();
-    }, Object.keys(stateNameToAbbr).length * 20 + 500);
-}
-
-// Force apply correct colors using CSS
-function forceApplyCorrectColors() {
-    console.log('Force applying correct colors...');
-    
-    const svg = $('#map svg');
-    if (svg.length > 0) {
-        svg.find('path').each(function() {
-            const path = $(this);
-            const correctColor = path.data('correctColor');
+    const mapInstance = $('#map').data('plugin-usmap');
+    console.log(`Map instance found: ${!!mapInstance}`);
+    if (mapInstance) {
+        console.log(`Raphael paper found: ${!!mapInstance.paper}`);
+        console.log('Map instance keys:', Object.keys(mapInstance));
+        
+        // Try to inspect the Raphael paper
+        if (mapInstance.paper && mapInstance.paper.set) {
+            console.log('Raphael paper type:', typeof mapInstance.paper);
+            console.log('Raphael paper length:', mapInstance.paper.length);
             
-            if (correctColor) {
-                // Apply color normally
-                this.style.fill = correctColor;
-                this.setAttribute('fill', correctColor);
-                
-                console.log('Force applied color:', correctColor, 'to path');
+            // Look at Raphael elements
+            try {
+                for (let i = 0; i < Math.min(3, mapInstance.paper.length || 0); i++) {
+                    const element = mapInstance.paper[i];
+                    if (element) {
+                        console.log(`Raphael element ${i}:`, {
+                            type: element.type,
+                            id: element.id,
+                            data: element.data ? element.data() : 'no data method',
+                            attrs: element.attrs || 'no attrs'
+                        });
+                    }
+                }
+            } catch (e) {
+                console.log('Error inspecting Raphael elements:', e.message);
             }
-        });
+        }
+        
+        // Check if there are states stored differently
+        if (mapInstance.stateElements) {
+            console.log('State elements found:', Object.keys(mapInstance.stateElements));
+        }
+        if (mapInstance.paths) {
+            console.log('Paths found:', Object.keys(mapInstance.paths));
+        }
     }
+    
+    console.log('=== END DEBUG ===');
 }
 
 // Export for debugging
@@ -642,11 +755,11 @@ window.mapDebug = {
     getTopActivitiesForState,
     getMinMaxForActivity,
     currentActivity,
-    updateMapColors,
     showTooltip,
     updateTooltipPosition,
-    forceColorUpdate,
-    initAllColors,
-    testDelaware,
-    forceApplyCorrectColors
+    updateMapColorsOnly,
+    buildPathStateMapping,
+    initMapWithNewColors,
+    debugMapElements,
+    pathStateMapping: () => pathStateMapping
 };
