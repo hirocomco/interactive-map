@@ -30,8 +30,8 @@ function initMap() {
     try {
         console.log("Initializing US Map...");
         
-        // Clear any existing map
-        $('#map').empty();
+        // Clear any existing map and hide it during initialization
+        $('#map').empty().removeClass('map-ready');
         
         // Ensure container has proper dimensions
         const mapContainer = $('#map');
@@ -40,11 +40,12 @@ function initMap() {
         // Force container dimensions if they're 0 or undefined
         if (mapContainer.width() === 0 || !mapContainer.width()) {
             mapContainer.css({
-                'width': '975px',
-                'height': '500px',
+                'width': '100%',
+                'height': 'auto',
+                'min-height': '500px',
                 'display': 'block'
             });
-            console.log('Forced container dimensions to:', mapContainer.width(), 'x', mapContainer.height());
+            console.log('Forced container dimensions to full width');
         }
         
         // Set up color scale for initial activity
@@ -53,10 +54,20 @@ function initMap() {
         // Generate state-specific styles for current activity
         const stateSpecificStyles = getStateSpecificStyles(currentActivity);
         
-        // Initialize the US Map with explicit dimensions
+        // Set container dimensions before plugin initialization so it uses them
+        const containerWidth = mapContainer.parent().width();
+        const mapWidth = containerWidth > 0 ? containerWidth - 40 : 935; // Account for padding
+        const mapHeight = Math.round(mapWidth * 0.6); // Maintain aspect ratio
+        
+        console.log(`Setting container dimensions: ${mapWidth}x${mapHeight}`);
+        
+        // Set the container dimensions BEFORE initializing the plugin
+        mapContainer.css({
+            'width': '100%',
+            'height': 'auto'
+        });
+        
         const mapInstance = $('#map').usmap({
-            width: 975,
-            height: 500,
             stateStyles: {
                 fill: '#f0f0f0',
                 stroke: '#fff',
@@ -129,8 +140,35 @@ function initMap() {
             }
         }, 100);
         
+        // Apply responsive styling immediately and show map
+        setTimeout(() => {
+            const svg = $('#map svg');
+            if (svg.length) {
+                // Remove hardcoded width and height attributes
+                svg.removeAttr('width').removeAttr('height');
+                // Apply CSS
+                svg.css({
+                    'width': '100%',
+                    'height': 'auto'
+                });
+                console.log('Applied responsive styling - showing map');
+                // Show the map now that it's properly sized
+                $('#map').addClass('map-ready');
+            }
+        }, 50); // Reduced delay
+        
         // Add control listeners
         addControlListeners();
+        
+        // Show the #1 state for total activity by default
+        setTimeout(() => {
+            const topStates = getStateRanking('total');
+            if (topStates && topStates.length > 0) {
+                const topState = topStates[0];
+                console.log(`Showing default state details for #1 state: ${topState}`);
+                showStateDetails(topState);
+            }
+        }, 500);
         
         console.log("Map initialized successfully");
         
@@ -220,54 +258,145 @@ function darkenColor(color, factor) {
     return `#${newR.toString(16).padStart(2, '0')}${newG.toString(16).padStart(2, '0')}${newB.toString(16).padStart(2, '0')}`;
 }
 
+// Helper function to make SVG responsive
+function makeMapResponsive() {
+    setTimeout(() => {
+        const svg = $('#map svg');
+        if (svg.length > 0) {
+            console.log('Making SVG responsive - current dimensions:', svg.attr('width'), 'x', svg.attr('height'));
+            
+            // Remove hardcoded width/height attributes
+            svg.removeAttr('width').removeAttr('height');
+            // Apply responsive CSS
+            svg.css({
+                'width': '100%',
+                'height': 'auto',
+                'max-width': '100%'
+            });
+            
+            // Also ensure the parent container is set correctly
+            $('#map').css({
+                'width': '100%',
+                'height': 'auto'
+            });
+            
+            console.log('Applied responsive styling to map SVG');
+        } else {
+            console.log('SVG not found, retrying...');
+            // Retry if SVG not found yet
+            setTimeout(() => makeMapResponsive(), 100);
+        }
+    }, 200); // Increased delay
+}
+
 // Update color scale based on activity
 function updateColorScale(activity) {
     const { min, max } = getMinMaxForActivity(activity);
     
     console.log(`Color scale for ${activity}: min=${min}, max=${max}`);
     
-    // Create a color scale function that returns hex colors
+    // Create a color scale function that uses smooth interpolation
     colorScale = function(value) {
         if (value <= 0) return '#f0f0f0'; // Light gray for no data
         
-        const normalized = (value - min) / (max - min);
+        const normalized = Math.max(0, Math.min(1, (value - min) / (max - min)));
         
-        // Use a blue color scale: light blue to dark blue (hex colors)
-        const intensity = Math.round(255 * (1 - normalized * 0.8)); // Light to dark
-        const blue = Math.round(255 * (0.4 + normalized * 0.6)); // Medium to full blue
-        
-        // Convert to hex
-        const intensityHex = intensity.toString(16).padStart(2, '0');
-        const blueHex = blue.toString(16).padStart(2, '0');
-        const color = `#${intensityHex}${intensityHex}${blueHex}`;
-        
-        console.log(`Color for value ${value}: ${color} (normalized: ${normalized})`);
-        return color;
+        // Use continuous color interpolation instead of discrete tiers
+        return interpolateColor(normalized);
     };
     
     // Update legend
     updateLegend(min, max);
 }
 
-// Update legend with current scale
-function updateLegend(min, max) {
-    const legendItems = document.querySelectorAll('.legend-item');
-    const quartiles = [
-        min,
-        min + (max - min) * 0.33,
-        min + (max - min) * 0.66,
-        max
+// Continuous color interpolation function
+function interpolateColor(normalized) {
+    // Define color stops for smooth gradient
+    const colorStops = [
+        { position: 0.0, color: [0, 39, 61] },     // #00273D (darkest blue)
+        { position: 0.33, color: [0, 54, 84] },   // #003654 (dark blue)
+        { position: 0.66, color: [0, 92, 143] },  // #005C8F (medium blue)
+        { position: 1.0, color: [0, 130, 202] }   // #0082CA (bright blue)
     ];
     
-    legendItems.forEach((item, index) => {
-        const colorEl = item.querySelector('.legend-color');
-        const textEl = item.querySelector('.legend-text');
-        
-        if (colorEl && textEl) {
-        colorEl.style.backgroundColor = colorScale(quartiles[index]);
-        textEl.textContent = Math.round(quartiles[index]).toLocaleString();
+    // Find the two color stops to interpolate between
+    let lowerStop = colorStops[0];
+    let upperStop = colorStops[colorStops.length - 1];
+    
+    for (let i = 0; i < colorStops.length - 1; i++) {
+        if (normalized >= colorStops[i].position && normalized <= colorStops[i + 1].position) {
+            lowerStop = colorStops[i];
+            upperStop = colorStops[i + 1];
+            break;
         }
-    });
+    }
+    
+    // Calculate interpolation factor between the two stops
+    const range = upperStop.position - lowerStop.position;
+    const factor = range === 0 ? 0 : (normalized - lowerStop.position) / range;
+    
+    // Interpolate RGB values
+    const r = Math.round(lowerStop.color[0] + (upperStop.color[0] - lowerStop.color[0]) * factor);
+    const g = Math.round(lowerStop.color[1] + (upperStop.color[1] - lowerStop.color[1]) * factor);
+    const b = Math.round(lowerStop.color[2] + (upperStop.color[2] - lowerStop.color[2]) * factor);
+    
+    // Convert to hex
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+
+// Update legend with current scale
+function updateLegend(min, max) {
+    // Get the legend container
+    const legendScale = document.querySelector('.legend-scale');
+    if (!legendScale) return;
+    
+    // Clear existing legend items
+    legendScale.innerHTML = '';
+    
+    // Create a gradient bar container
+    const gradientContainer = document.createElement('div');
+    gradientContainer.className = 'legend-gradient-container';
+    
+    // Create the gradient bar
+    const gradientBar = document.createElement('div');
+    gradientBar.className = 'legend-gradient-bar';
+    
+    // Create gradient background using CSS linear-gradient
+    const gradientColors = [
+        '#00273D',   // 0%
+        '#003654',   // 33%
+        '#005C8F',   // 66%
+        '#0082CA'    // 100%
+    ];
+    
+    gradientBar.style.background = `linear-gradient(to right, ${gradientColors.join(', ')})`;
+    
+    // Create value labels container
+    const labelsContainer = document.createElement('div');
+    labelsContainer.className = 'legend-labels';
+    
+    // Create min, mid, and max labels
+    const minLabel = document.createElement('span');
+    minLabel.className = 'legend-value min';
+    minLabel.textContent = Math.round(min).toLocaleString();
+    
+    const midLabel = document.createElement('span');
+    midLabel.className = 'legend-value mid';
+    midLabel.textContent = Math.round((min + max) / 2).toLocaleString();
+    
+    const maxLabel = document.createElement('span');
+    maxLabel.className = 'legend-value max';
+    maxLabel.textContent = Math.round(max).toLocaleString();
+    
+    // Assemble the legend
+    labelsContainer.appendChild(minLabel);
+    labelsContainer.appendChild(midLabel);
+    labelsContainer.appendChild(maxLabel);
+    
+    gradientContainer.appendChild(gradientBar);
+    gradientContainer.appendChild(labelsContainer);
+    
+    legendScale.appendChild(gradientContainer);
 }
 
 
@@ -279,7 +408,10 @@ function showStateDetails(stateName) {
     const detailsTitle = document.getElementById('details-title');
     const detailsBody = document.getElementById('details-body');
     
-    detailsTitle.textContent = stateName;
+    detailsTitle.innerHTML = `
+        <span class="state-name">${stateName}</span>
+        <span class="click-instruction">(Click a state to see details)</span>
+    `;
     
     // Get top 3 activities for this state
     const topActivities = getTopActivitiesForState(stateName);
@@ -453,6 +585,9 @@ function initMapWithNewColors() {
         
         const mapContainer = $('#map');
         
+        // Hide map during recreation
+        mapContainer.removeClass('map-ready');
+        
         // Step 1: Completely destroy the existing plugin instance
         console.log('Destroying existing plugin instance...');
         
@@ -465,7 +600,7 @@ function initMapWithNewColors() {
         
         // Step 2: Completely recreate the map container element to ensure clean state
         const mapContainerParent = mapContainer.parent();
-        const newMapContainer = $('<div id="map" style="width: 100%; height: 500px;"></div>');
+        const newMapContainer = $('<div id="map"></div>');
         
         mapContainer.remove();
         mapContainerParent.append(newMapContainer);
@@ -479,9 +614,20 @@ function initMapWithNewColors() {
         setTimeout(() => {
             console.log('Initializing fresh map instance...');
             
+            // Set container dimensions before plugin initialization
+            const containerWidth = newMapContainer.parent().width();
+            const mapWidth = containerWidth > 0 ? containerWidth - 40 : 935;
+            const mapHeight = Math.round(mapWidth * 0.6);
+            
+            console.log(`Setting fresh container dimensions: ${mapWidth}x${mapHeight}`);
+            
+            // Set the container dimensions BEFORE initializing the plugin
+            newMapContainer.css({
+                'width': '100%',
+                'height': 'auto'
+            });
+            
             const mapInstance = newMapContainer.usmap({
-                width: 975,
-                height: 500,
                 stateStyles: {
                     fill: '#f0f0f0',
                     stroke: '#fff',
@@ -560,6 +706,23 @@ function initMapWithNewColors() {
                 }
             }, 100);
             
+            // Apply responsive styling and show recreated map
+            setTimeout(() => {
+                const svg = $('#map svg');
+                if (svg.length) {
+                    // Remove hardcoded width and height attributes
+                    svg.removeAttr('width').removeAttr('height');
+                    // Apply CSS
+                    svg.css({
+                        'width': '100%',
+                        'height': 'auto'
+                    });
+                    console.log('Applied responsive styling to recreated map - showing');
+                    // Show the recreated map
+                    $('#map').addClass('map-ready');
+                }
+            }, 50); // Reduced delay
+            
         }, 100);
         
     } catch (error) {
@@ -586,11 +749,15 @@ function addControlListeners() {
         // Use simple reinitialization approach - it works reliably
         initMapWithNewColors();
         
-        // Clear state details when switching activities
-        document.getElementById('details-title').textContent = 'Click a state to see details';
-        document.getElementById('details-body').innerHTML = `
-            <p>Select any state on the map above to view detailed outdoor activity data and rankings.</p>
-        `;
+        // Show the #1 state for the new activity
+        setTimeout(() => {
+            const topStates = getStateRanking(currentActivity);
+            if (topStates && topStates.length > 0) {
+                const topState = topStates[0];
+                console.log(`Showing state details for #1 state in ${currentActivity}: ${topState}`);
+                showStateDetails(topState);
+            }
+        }, 600);
     });
 }
 

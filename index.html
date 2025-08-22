@@ -17,6 +17,11 @@
     <meta name="twitter:title" content="Interactive US Map: Outdoor Activity Preferences">
     <meta name="twitter:description" content="Explore which outdoor activities dominate in each US state">
     
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -72,15 +77,15 @@
         </div>
 
         <div class="map-container">
-            <div id="map" style="width: 100%; height: 500px;"></div>
+            <div id="map"></div>
             <div id="tooltip" class="tooltip"></div>
         </div>
 
         <div class="state-details" id="state-details">
             <div class="details-content">
-                <h2 id="details-title">Click a state to see details</h2>
+                <h2 id="details-title">Loading state details...</h2>
                 <div id="details-body">
-                    <p>Select any state on the map above to view detailed outdoor activity data and rankings.</p>
+                    <p>Displaying data for the most active state...</p>
                 </div>
             </div>
         </div>
@@ -109,8 +114,8 @@
     </main>
 
     <footer>
-        <p>Data visualization of outdoor activity search patterns across US states</p>
-        <p>© 2024 Interactive Outdoor Activity Map</p>
+        <p>Data visualization of outdoor activity search patterns across US states made by <a href="https://hirocom.co" target="_blank">hirocom.co</a> for <a href="https://kuhl.com" target="_blank">kuhl.com</a></p>
+        <p>KÜHL® | BORN IN THE MOUNTAINS®</p>
     </footer>
 
     <!-- Scripts -->
